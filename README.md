@@ -144,7 +144,7 @@ npm install
 Créer un fichier `.env` à la racine :
 
 ```env
-MONGODB_URI=mongodb+srv://logwatch_user:gamal123@projet3-logwatch.tc2ox7y.mongodb.net/logwatch_db
+MONGODB_URI=mongodb+srv://USERNAME:PASSWORD@cluster.mongodb.net/logwatch_db
 PORT=3000
 ```
 
@@ -338,30 +338,9 @@ node scripts/test-api.js
 
 ---
 
-## 📝 Convention Git
 
-### Format des commits
 
-```
-feat(scope): description courte
-fix(scope): description courte
-docs(scope): description courte
-```
 
-### Branches
-
-```
-main           ← code stable
-develop        ← développement principal
-feat/seed      ← script Faker.js (M5)
-feat/api       ← routes Express (M2)
-feat/pipelines ← agrégations MongoDB (M3)
-feat/frontend  ← interface web (M4)
-feat/search    ← recherche + tests (M5)
-docs/rapport   ← rapport + slides (M6)
-```
-
----
 
 ## 📄 Licence
 
