@@ -110,6 +110,17 @@
       ══════════════════════════════════════ -->
       <div id="page-dashboard" class="page active">
 
+        <!-- Barre auto-refresh -->
+        <div class="refresh-bar">
+          <div class="refresh-status">
+            <span class="refresh-dot" id="refreshDot"></span>
+            <span id="refreshLabel">Auto-refresh activé — dernière mise à jour : à l'instant</span>
+          </div>
+          <button class="refresh-btn" id="refreshBtn" onclick="toggleAutoRefresh()" title="Pause / Reprendre">
+            <i class="ph-fill ph-pause" id="refreshIcon"></i>
+          </button>
+        </div>
+
         <!-- KPIs -->
         <div class="kpi-grid">
           <div class="kpi-card kpi-card-1">
