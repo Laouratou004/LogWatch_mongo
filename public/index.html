@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="fr" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LogWatch - Dashboard</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Custom CSS -->
+    <link href="/css/style.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav id="sidebar" class="col-md-3 col-lg-2 d-md-block bg-dark sidebar collapse">
+                <div class="position-sticky pt-3 sidebar-sticky">
+                    <h4 class="px-3 text-white mb-4"><i class="ph ph-watch text-primary"></i> LogWatch</h4>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link active" href="#" onclick="showSection('dashboard')">
+                                <i class="ph ph-squares-four"></i> Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="showSection('logs')">
+                                <i class="ph ph-list-dashes"></i> Recherche Logs
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="showSection('alertes')">
+                                <i class="ph ph-bell-ringing"></i> Alertes Système
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <!-- Main content -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 mt-4">
+                
+                <div id="section-dashboard" class="content-section">
+                    <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+                        <h1 class="h2">Aperçu en temps réel</h1>
+                        <div class="btn-toolbar mb-2 mb-md-0">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="fetchDashboardData()">
+                                <i class="ph ph-arrows-clockwise"></i> Rafraîchir
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- KPIs -->
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="card kpi-card bg-primary text-white">
+                                <div class="card-body d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h5 class="card-title">Total Logs</h5>
+                                        <h2 class="mb-0" id="kpi-total-logs">--</h2>
+                                    </div>
+                                    <i class="ph ph-database fs-1 opacity-50"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card kpi-card bg-danger text-white">
+                                <div class="card-body d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h5 class="card-title">Erreurs & Critiques</h5>
+                                        <h2 class="mb-0" id="kpi-erreurs">--</h2>
+                                    </div>
+                                    <i class="ph ph-warning-circle fs-1 opacity-50"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card kpi-card bg-warning text-dark">
+                                <div class="card-body d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <h5 class="card-title">Alertes Non Résolues</h5>
+                                        <h2 class="mb-0" id="kpi-alertes">--</h2>
+                                    </div>
+                                    <i class="ph ph-bell fs-1 opacity-50"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Charts Row 1 -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-transparent">Distribution Temporelle (24h)</div>
+                                <div class="card-body">
+                                    <canvas id="chartDistribution"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-transparent">Taux d'erreur par application</div>
+                                <div class="card-body">
+                                    <canvas id="chartTauxErreur"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Charts Row 2 -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-transparent">Top 10 Erreurs Fréquentes</div>
+                                <div class="card-body">
+                                    <canvas id="chartTopErreurs"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-transparent">Détection d'Anomalies (Pics)</div>
+                                <div class="card-body">
+                                    <canvas id="chartAnomalies"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="section-logs" class="content-section d-none">
+                    <h2 class="mb-4">Recherche Avancée de Logs</h2>
+                    <div class="card mb-4">
+                        <div class="card-body">
+                            <form id="form-search-logs" class="row g-3" onsubmit="event.preventDefault(); fetchLogs();">
+                                <div class="col-md-3">
+                                    <label class="form-label">Niveau (Level)</label>
+                                    <select class="form-select" id="search-level">
+                                        <option value="">Tous</option>
+                                        <option value="INFO">INFO</option>
+                                        <option value="WARN">WARN</option>
+                                        <option value="ERROR">ERROR</option>
+                                        <option value="CRITICAL">CRITICAL</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Type d'Application</label>
+                                    <select class="form-select" id="search-type">
+                                        <option value="">Tous</option>
+                                        <option value="java">Java (Exceptions)</option>
+                                        <option value="web">Web (HTTP)</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-4 d-flex align-items-end">
+                                    <button type="submit" class="btn btn-primary"><i class="ph ph-magnifying-glass"></i> Rechercher</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>App ID</th>
+                                    <th>Level</th>
+                                    <th>Message</th>
+                                    <th>Détails</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-logs-body">
+                                <!-- Filled via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="section-alertes" class="content-section d-none">
+                    <h2 class="mb-4">Alertes Système</h2>
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>App ID</th>
+                                    <th>Timestamp</th>
+                                    <th>Type</th>
+                                    <th>Statut</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-alertes-body">
+                                <!-- Filled via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </main>
+        </div>
+    </div>
+
+    <!-- Bootstrap & Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/js/app.js"></script>
+</body>
+</html>
