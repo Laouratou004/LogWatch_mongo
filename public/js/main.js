@@ -7,12 +7,35 @@ function toggleSidebar() {
   localStorage.setItem('sidebar-collapsed', sidebar.classList.contains('collapsed'));
 }
 
-// Restaurer l'état de la sidebar
+// ── Bascule thème clair / sombre ──
+function applyTheme(theme) {
+  const icon = document.getElementById('themeIcon');
+  const label = document.getElementById('themeLabel');
+  if (theme === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+    if (icon)  icon.className = 'ph-fill ph-sun';
+    if (label) label.textContent = 'Mode clair';
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    if (icon)  icon.className = 'ph-fill ph-moon';
+    if (label) label.textContent = 'Mode sombre';
+  }
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  const next = current === 'light' ? 'dark' : 'light';
+  applyTheme(next);
+  localStorage.setItem('theme', next);
+}
+
+// Restaurer l'état de la sidebar et du thème
 document.addEventListener('DOMContentLoaded', () => {
   const sidebar = document.getElementById('sidebar');
   if (localStorage.getItem('sidebar-collapsed') === 'true') {
     sidebar.classList.add('collapsed');
   }
+  applyTheme(localStorage.getItem('theme') || 'dark');
   updateDate();
   updateInsertForm();
   loadDashboard();

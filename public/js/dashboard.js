@@ -343,3 +343,81 @@ async function showLogDetail(id) {
     console.error('Erreur détail log:', err);
   }
 }
+
+// ══════════════════════════════════════
+// AUTO-REFRESH DU DASHBOARD
+// ══════════════════════════════════════
+const REFRESH_INTERVAL_MS = 30000;     // 30 secondes
+let refreshTimerId    = null;          // setInterval pour le refresh des données
+let lastRefreshTime   = Date.now();    // horodatage de la dernière mise à jour
+let labelTimerId      = null;          // setInterval pour le libellé "il y a Xs"
+let autoRefreshActive = true;
+
+function startAutoRefresh() {
+  stopAutoRefresh();
+  autoRefreshActive = true;
+
+  // Refresh des données toutes les 30s
+  refreshTimerId = setInterval(() => {
+    if (document.getElementById('page-dashboard').classList.contains('active')) {
+      loadDashboard();
+      lastRefreshTime = Date.now();
+    }
+  }, REFRESH_INTERVAL_MS);
+
+  // Mise à jour du libellé "il y a Xs" toutes les secondes
+  labelTimerId = setInterval(updateRefreshLabel, 1000);
+
+  setRefreshUI(true);
+  lastRefreshTime = Date.now();
+  updateRefreshLabel();
+}
+
+function stopAutoRefresh() {
+  if (refreshTimerId) clearInterval(refreshTimerId);
+  if (labelTimerId)   clearInterval(labelTimerId);
+  refreshTimerId = null;
+  labelTimerId   = null;
+}
+
+function toggleAutoRefresh() {
+  if (autoRefreshActive) {
+    stopAutoRefresh();
+    autoRefreshActive = false;
+    setRefreshUI(false);
+    const label = document.getElementById('refreshLabel');
+    if (label) label.textContent = 'Auto-refresh en pause';
+  } else {
+    loadDashboard();
+    startAutoRefresh();
+  }
+}
+
+function setRefreshUI(active) {
+  const dot  = document.getElementById('refreshDot');
+  const icon = document.getElementById('refreshIcon');
+  if (!dot || !icon) return;
+  if (active) {
+    dot.classList.remove('paused');
+    icon.className = 'ph-fill ph-pause';
+  } else {
+    dot.classList.add('paused');
+    icon.className = 'ph-fill ph-play';
+  }
+}
+
+function updateRefreshLabel() {
+  const label = document.getElementById('refreshLabel');
+  if (!label || !autoRefreshActive) return;
+  const secs = Math.floor((Date.now() - lastRefreshTime) / 1000);
+  const texte = secs < 5 ? "à l'instant"
+              : secs < 60 ? `il y a ${secs}s`
+              : `il y a ${Math.floor(secs / 60)} min`;
+  label.textContent = `Auto-refresh actif — dernière mise à jour : ${texte}`;
+}
+
+// Démarrer le refresh dès que le DOM est prêt
+document.addEventListener('DOMContentLoaded', () => {
+  // Petit délai pour laisser le premier loadDashboard() se faire
+  setTimeout(startAutoRefresh, 1000);
+});

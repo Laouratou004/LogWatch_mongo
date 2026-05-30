@@ -364,24 +364,72 @@ Deux index ont été créés sur la collection logs pour optimiser les requêtes
 db.logs.createIndex({ level: 1 })        // Index 1 — filtrage par niveau
 db.logs.createIndex({ timestamp: -1 })   // Index 2 — requêtes temporelles
 
-6.2 Résultats explain()
-La commande explain('executionStats') a été exécutée pour mesurer l'impact des index :
+6.2 Résultats explain() — mesures réelles
+La commande explain('executionStats') a été exécutée sur trois scénarios représentatifs. Les mesures ci-dessous proviennent du cluster MongoDB Atlas en production avec 2 013 logs.
 
-Métrique	Filtre level = ERROR	Filtre timestamp >= 2026-01-01
-Stage parent	FETCH	FETCH
-Stage index	IXSCAN ✓	IXSCAN ✓
-Index utilisé	level_1	timestamp_-1
-Documents examinés	454 / 2 000	1 553 / 2 000
-Documents retournés	454	1 553
-Temps d'exécution	0 ms	2 ms
+Scénario 1 — Filtre level = "ERROR" AVEC index
+Métrique	Valeur
+Stage parent	FETCH
+Stage index	IXSCAN ✓
+Index utilisé	level_1
+Documents examinés	457 sur 2 013
+Index entries examinées	457
+Documents retournés	457
+Temps d'exécution	1 ms
 
-6.3 Justification des index
-•	Index { level: 1 } : Les requêtes de filtrage par niveau (ERROR, CRITICAL) sont les plus fréquentes dans LogWatch. Cet index réduit les documents examinés de 2 000 à 454 pour un filtre ERROR, soit une réduction de 77%.
-•	Index { timestamp: -1 } : Toutes les requêtes temporelles (pipelines, dashboard, filtres par date) utilisent le champ timestamp. L'ordre décroissant (-1) optimise les requêtes récentes qui sont les plus courantes en monitoring.
-•	Séparés et non composés : Le sujet impose deux index séparés. Les requêtes utilisent tantôt level seul, tantôt timestamp seul — un index composé serait moins efficace pour les requêtes n'utilisant qu'un seul champ.
+Scénario 2 — Filtre level = "ERROR" SANS index (index level supprimé temporairement)
+Métrique	Valeur
+Stage parent	COLLSCAN ✗
+Index utilisé	aucun
+Documents examinés	2 013 sur 2 013
+Documents retournés	457
+Temps d'exécution	1 ms
 
-6.4 IXSCAN vs COLLSCAN
-Sans index, MongoDB effectue un COLLSCAN (Collection Scan) qui parcourt tous les documents de la collection. Avec les index, il effectue un IXSCAN (Index Scan) qui accède directement aux documents pertinents via la structure B-tree de l'index. Sur une collection de 2 000 documents, le gain est déjà significatif. Sur des millions de documents en production, la différence serait critique.
+Scénario 3 — Filtre timestamp dernières 24h AVEC index
+Métrique	Valeur
+Stage parent	FETCH
+Stage index	IXSCAN ✓
+Index utilisé	timestamp_-1
+Documents examinés	11 sur 2 013
+Index entries examinées	11
+Documents retournés	11
+Temps d'exécution	6 ms
+
+6.3 Analyse comparative — IXSCAN vs COLLSCAN
+La comparaison des Scénarios 1 et 2 démontre concrètement l'efficacité de l'index :
+
+Indicateur	Sans index	Avec index	Gain
+Documents lus	2 013	457	4.4× moins
+Stratégie	COLLSCAN	IXSCAN	—
+Sélectivité	22.7 %	100 %	×4.4
+
+Sans index, MongoDB doit lire l'intégralité des 2 013 documents pour ne retourner que les 457 pertinents (sélectivité de 22.7 %). Avec l'index level_1, il consulte directement la structure B-tree de l'index et n'accède qu'aux 457 documents nécessaires (sélectivité de 100 %, ratio docs_examinés / docs_retournés idéal).
+
+Sur le Scénario 3 (filtre temporel), l'index timestamp_-1 réduit la lecture à seulement 11 documents sur 2 013, soit un gain de 183×. C'est précisément ce type de gain qui rend les dashboards temps réel utilisables en production.
+
+6.4 Justification du choix des index
+•	Index { level: 1 } : Les requêtes de filtrage par niveau (ERROR, CRITICAL, WARN) sont les plus fréquentes dans LogWatch : dashboard, KPIs, graphiques de répartition, alertes. L'ordre croissant (1) est cohérent avec la cardinalité faible du champ (5 valeurs possibles).
+•	Index { timestamp: -1 } : Toutes les requêtes temporelles (pipelines, "derniers logs", filtres par date) utilisent le champ timestamp. L'ordre décroissant (-1) optimise les requêtes récentes — les plus fréquentes en monitoring où l'on regarde quasi exclusivement les événements récents.
+•	Index { app_id: 1 } : Ajouté pour les filtres par application (page Logs, statistiques par app). Cardinalité de 10 (10 applications).
+•	Index séparés et non composés : Les requêtes utilisent tantôt level seul, tantôt timestamp seul, tantôt l'intersection — un index composé { level, timestamp } serait moins efficace pour les requêtes n'utilisant qu'un seul champ. La règle ESR (Equality, Sort, Range) de MongoDB recommande des index simples quand les patterns d'accès sont variés.
+
+6.5 Projection sur des volumes de production
+Sur 2 013 documents, le temps d'exécution absolu reste de l'ordre de la milliseconde même sans index — MongoDB est optimisé pour les petits volumes en mémoire. Le critère pertinent est donc le ratio documents_examinés / documents_retournés (idéal = 1.0). 
+
+Extrapolation : sur une collection de 10 millions de logs (taille réaliste en production) avec la même sélectivité de 22.7 %, un COLLSCAN devrait parcourir 10 000 000 documents alors qu'un IXSCAN n'en parcourrait que 2 270 000. Sur des disques SSD à 500 MB/s avec des documents moyens de 500 octets, cela représente :
+•	COLLSCAN : ~10 secondes
+•	IXSCAN : ~2.3 secondes
+
+Dans un dashboard temps réel rafraîchi toutes les 30 secondes, seul l'IXSCAN est viable.
+
+6.6 Reproduction des mesures
+Les mesures de cette section peuvent être reproduites en lançant les commandes suivantes dans mongosh :
+
+db.logs.find({ level: 'ERROR' }).explain('executionStats')
+db.logs.dropIndex({ level: 1 })
+db.logs.find({ level: 'ERROR' }).explain('executionStats')   // observer COLLSCAN
+db.logs.createIndex({ level: 1 })                            // restaurer l'index
+db.logs.find({ timestamp: { $gte: new Date(Date.now() - 24*3600*1000) } }).explain('executionStats')
  
 7. Difficultés rencontrées et solutions
 Difficulté	Solution apportée
@@ -411,6 +459,51 @@ MongoDB s'est avéré parfaitement adapté à la problématique des logs applica
 •	Déploiement sur serveur de production avec variables d'environnement sécurisées
 •	Augmentation du volume de données pour tester les performances à grande échelle
 •	Export des rapports d'analyse en PDF depuis le dashboard
+
+9. Utilisation de l'intelligence artificielle
+Conformément à la clause du cahier des charges autorisant l'usage de l'IA sous réserve d'explication, cette section détaille comment Claude (Anthropic) a été utilisé tout au long du projet.
+
+9.1 Outils utilisés
+•	Claude (modèle Sonnet) — assistant principal pour le développement et la rédaction
+•	GitHub Copilot — complétion de code dans VS Code (suggestions ponctuelles)
+
+9.2 Domaines d'utilisation
+L'IA a été sollicitée principalement sur quatre axes :
+
+a) Conception MongoDB
+•	Validation du choix entre imbrication et référence pour modéliser la relation logs → applications
+•	Vérification de la syntaxe des pipelines d'agrégation, notamment l'équivalent du HAVING SQL en MongoDB ($match après $group)
+•	Conseils sur le choix des index (level, timestamp, app_id) et leur ordre
+
+b) Génération de données réalistes
+•	Suggestion d'utiliser @faker-js/faker pour générer les 2 000 logs
+•	Modèles de messages d'erreur Java, requêtes SQL, codes HTTP cohérents par niveau
+
+c) Débogage et bonnes pratiques
+•	Résolution de problèmes de connexion MongoDB Atlas (URI, IP whitelisting)
+•	Validation que les routes Express renvoient les bons codes HTTP
+•	Détection de la référence à un script inexistant (scripts/generate-logs.js) dans package.json
+
+d) Rédaction du rapport
+•	Aide à la structuration des sections selon le plan imposé par le CDC
+•	Vérification orthographique et reformulation pour clarifier les explications techniques
+
+9.3 Ce qui a été fait sans IA
+•	Choix de l'architecture globale (MVC : routes / controllers / models)
+•	Conception de la maquette UI et choix des couleurs du dashboard
+•	Rédaction des messages de logs simulés spécifiques au contexte UGANC (noms d'applications, responsables, départements)
+•	Soutenance orale et démonstration live
+•	Décisions de découpage du travail entre les membres du groupe
+
+9.4 Capacité à expliquer le code
+Chaque membre du groupe est en mesure d'expliquer :
+•	Le rôle de chaque collection, route et pipeline
+•	Le fonctionnement de l'opérateur $exists et son intérêt par rapport à SQL
+•	La différence IXSCAN / COLLSCAN et la justification des index
+•	Le flux complet d'une requête : navigateur → Express → contrôleur → Mongoose → MongoDB Atlas
+•	Les choix d'implémentation effectués (pourquoi strict: false, pourquoi $regex avec options i, etc.)
+
+L'IA a été utilisée comme un outil d'apprentissage et d'accélération, jamais comme un substitut à la compréhension. Chaque suggestion a été lue, testée et adaptée au contexte du projet.
  
 Annexes
 Annexe A — Structure du projet
