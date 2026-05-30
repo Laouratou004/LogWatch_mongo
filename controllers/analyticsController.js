@@ -144,13 +144,18 @@ exports.getTemporal = async (req, res) => {
 exports.getAnomalies = async (req, res) => {
   try {
     const SEUIL = 50;
+    const { app_id } = req.query;
+
+    // Filtre de base — 30 derniers jours
+    const matchBase = {
+      timestamp: { $gte: new Date(Date.now() - 3600000 * 24 * 30) }
+    };
+
+    // Filtre optionnel par application
+    if (app_id) matchBase.app_id = app_id;
 
     const pipeline = [
-      {
-        $match: {
-          timestamp: { $gte: new Date(Date.now() - 3600000 * 24 * 30) } // 30 derniers jours
-        }
-      },
+      { $match: matchBase },
       {
         $group: {
           _id: { $dateToString: { format: '%Y-%m-%dT%H', date: '$timestamp' } },
@@ -158,7 +163,7 @@ exports.getAnomalies = async (req, res) => {
         }
       },
       {
-        $match: { count: { $gt: SEUIL } } // équivalent HAVING COUNT(*) > 50
+        $match: { count: { $gt: SEUIL } }
       },
       { $sort: { count: -1 } },
       {
@@ -183,7 +188,7 @@ exports.getAnomalies = async (req, res) => {
       if (!dejaExiste) {
         await Alerte.create({
           alerte_id: `alerte_auto_${Date.now()}`,
-          app_id: 'system',
+          app_id: app_id || 'system',
           timestamp: new Date(),
           type_alerte: 'VOLUME_ANOMALIE',
           description: `Pic détecté : ${pic.count} logs à ${pic.heure}`,
@@ -197,6 +202,7 @@ exports.getAnomalies = async (req, res) => {
 
     res.json({
       seuil: SEUIL,
+      app_id: app_id || 'toutes',
       anomalies_detectees: resultats.length,
       resultats
     });
