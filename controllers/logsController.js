@@ -1,5 +1,7 @@
 const Log = require('../models/Log');
 const mongoose = require('mongoose');
+const Alerte = require('../models/Alerte');
+
 
 // GET /api/logs — Liste paginée
 exports.getLogs = async (req, res) => {
@@ -43,6 +45,31 @@ exports.getLogById = async (req, res) => {
 exports.createLog = async (req, res) => {
   try {
     const log = await Log.create(req.body);
+
+    // Alerte automatique si log CRITICAL
+    if (log.level === 'CRITICAL') {
+      const dejaExiste = await Alerte.findOne({
+        type_alerte: 'ERREUR_CRITIQUE',
+        app_id: log.app_id,
+        resolue: false
+      });
+
+      if (!dejaExiste) {
+        await Alerte.create({
+          alerte_id: `alerte_auto_${Date.now()}`,
+          app_id: log.app_id,
+          timestamp: new Date(),
+          type_alerte: 'ERREUR_CRITIQUE',
+          description: `Log CRITICAL détecté : ${log.message}`,
+          seuil_declenche: 1,
+          valeur_observee: 1,
+          resolue: false,
+          assignee_uid: null
+        });
+        console.log(`🚨 Alerte CRITICAL créée pour ${log.app_id}`);
+      }
+    }
+
     res.status(201).json(log);
   } catch (err) {
     res.status(500).json({ error: err.message });
