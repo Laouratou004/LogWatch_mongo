@@ -1,30 +1,52 @@
+// =============================================================================
+// public/js/analytics.js — Page "Analytique" : les 4 pipelines visualises
+// -----------------------------------------------------------------------------
+// Affiche les resultats des 4 pipelines d'agregation :
+//   - Pipeline 1 : Taux d'erreur par application       (graphique barres horiz.)
+//   - Pipeline 2 : Top 10 erreurs frequentes           (liste + barres de progression)
+//   - Pipeline 3 : Distribution temporelle complete    (graphique courbes lisses)
+//   - Pipeline 4 : Detection d'anomalies               (cartes rouges si pics)
+// =============================================================================
+
+// Instances des graphiques (pour pouvoir les detruire avant rerender)
 let chartErrorRate = null;
 let chartTemporalFull = null;
 
+// =============================================================================
+// Point d'entree : charge les 4 sections en parallele
+// =============================================================================
 async function loadAnalytique() {
   await Promise.all([
-    loadErrorRate(),
-    loadTopErrors(),
-    loadTemporalFull(),
-    loadAnomalies(),
+    loadErrorRate(),       // Pipeline 1
+    loadTopErrors(),       // Pipeline 2
+    loadTemporalFull(),    // Pipeline 3
+    loadAnomalies(),       // Pipeline 4
   ]);
 }
 
-// ── Pipeline 1 — Taux d'erreur par application ──
+// =============================================================================
+// PIPELINE 1 — Taux d'erreur par application (graphique barres horizontales)
+// =============================================================================
 async function loadErrorRate() {
   try {
     const res  = await fetch(`${API}/analytics/error-rate`);
     const data = await res.json();
 
+    // Extraction des deux series : noms d'applis + taux d'erreur
     const labels = data.resultats.map(r => r.app_id);
     const taux   = data.resultats.map(r => r.taux_erreur_pct);
 
+    // Couleurs CONDITIONNELLES selon le taux :
+    //   > 30% = rouge (critique)
+    //   > 15% = jaune (warning)
+    //   sinon = bleu (ok)
     const colors = taux.map(t =>
       t > 30 ? COLORS.danger :
       t > 15 ? COLORS.warning :
       COLORS.primary
     );
 
+    // Couleurs de fond translucides assorties
     const bgColors = taux.map(t =>
       t > 30 ? 'rgba(239,68,68,0.15)' :
       t > 15 ? 'rgba(255,214,10,0.15)' :
@@ -51,7 +73,7 @@ async function loadErrorRate() {
       },
       options: {
         responsive: true,
-        indexAxis: 'y',
+        indexAxis: 'y',     // 'y' = barres HORIZONTALES (au lieu de verticales par defaut)
         animation: { duration: 900, easing: 'easeInOutQuart' },
         plugins: {
           legend: { display: false },
@@ -64,6 +86,7 @@ async function loadErrorRate() {
             padding: 12,
             cornerRadius: 10,
             callbacks: {
+              // Format custom des tooltips : "Taux d'erreur : 23.45%"
               label: ctx => ` Taux d'erreur : ${ctx.parsed.x}%`
             }
           }
@@ -73,6 +96,7 @@ async function loadErrorRate() {
             ticks: {
               color: COLORS.text,
               font: { family: 'Inter', size: 11 },
+              // Ajoute "%" derriere chaque valeur de l'axe
               callback: v => v + '%'
             },
             grid: { color: COLORS.grid },
@@ -91,21 +115,28 @@ async function loadErrorRate() {
   }
 }
 
-// ── Pipeline 2 — Top 10 erreurs ──
+// =============================================================================
+// PIPELINE 2 — Top 10 erreurs (liste avec barre de progression)
+// =============================================================================
 async function loadTopErrors() {
   try {
     const res  = await fetch(`${API}/analytics/top-errors`);
     const data = await res.json();
     const container = document.getElementById('top-errors-list');
 
+    // On utilise le 1er resultat comme reference pour calculer les pourcentages
+    // (la barre la plus pleine = 100%, les autres relativement)
     const maxOcc = data.resultats[0]?.nb_occurrences || 1;
 
+    // Construction d'un bloc par erreur
     container.innerHTML = data.resultats.map((r, i) => {
       const pct = Math.round((r.nb_occurrences / maxOcc) * 100);
+      // Couleur differente pour les erreurs CRITICAL (rose au lieu de rouge)
       const barColor = r.level === 'CRITICAL' ? COLORS.pink : COLORS.danger;
 
       return `
         <div style="margin-bottom:14px">
+          <!-- En-tete : rang, message tronque, badge level, compteur -->
           <div style="display:flex;justify-content:space-between;
                       align-items:center;margin-bottom:6px">
             <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
@@ -124,6 +155,7 @@ async function loadTopErrors() {
               </span>
             </div>
           </div>
+          <!-- Barre de progression -->
           <div style="height:4px;background:rgba(255,255,255,0.06);
                       border-radius:99px;overflow:hidden">
             <div style="height:100%;width:${pct}%;
@@ -138,7 +170,10 @@ async function loadTopErrors() {
   }
 }
 
-// ── Pipeline 3 — Distribution temporelle complète ──
+// =============================================================================
+// PIPELINE 3 — Distribution temporelle complete (courbe lisse)
+// Difference avec le dashboard : ici on affiche TOUTES les heures (pas juste 24)
+// =============================================================================
 async function loadTemporalFull() {
   try {
     const res  = await fetch(`${API}/analytics/temporal`);
@@ -152,6 +187,7 @@ async function loadTemporalFull() {
 
     const ctx = document.getElementById('chart-temporal-full').getContext('2d');
 
+    // Degrades pour le fond des courbes (effet "remplissage")
     const gradBlue = ctx.createLinearGradient(0, 0, 0, 300);
     gradBlue.addColorStop(0, 'rgba(67,97,238,0.3)');
     gradBlue.addColorStop(1, 'rgba(67,97,238,0)');
@@ -171,10 +207,10 @@ async function loadTemporalFull() {
             borderColor: COLORS.primary,
             backgroundColor: gradBlue,
             borderWidth: 2,
-            fill: true,
-            tension: 0.4,
-            pointRadius: 0,
-            pointHoverRadius: 5,
+            fill: true,           // remplit la zone sous la courbe
+            tension: 0.4,         // tension = courbure de la ligne (0 = droite, 1 = tres courbe)
+            pointRadius: 0,       // pas de points visibles par defaut
+            pointHoverRadius: 5,  // points apparaissent au survol
             pointHoverBackgroundColor: COLORS.primary,
             pointHoverBorderColor: '#fff',
             pointHoverBorderWidth: 2,
@@ -197,6 +233,7 @@ async function loadTemporalFull() {
       },
       options: {
         responsive: true,
+        // Mode 'index' : au survol, on voit les valeurs des DEUX courbes simultanement
         interaction: { mode: 'index', intersect: false },
         animation: { duration: 900, easing: 'easeInOutQuart' },
         plugins: {
@@ -243,7 +280,9 @@ async function loadTemporalFull() {
   }
 }
 
-// ── Pipeline 4 — Anomalies ──
+// =============================================================================
+// PIPELINE 4 — Anomalies (cartes rouges avec heure et nombre)
+// =============================================================================
 async function loadAnomalies() {
   try {
     const res  = await fetch(`${API}/analytics/anomalies`);
@@ -251,8 +290,10 @@ async function loadAnomalies() {
     const container = document.getElementById('anomalies-list');
     const badge     = document.getElementById('anomalies-badge');
 
+    // Affichage du badge "N anomalies — seuil : 50"
     badge.textContent = `${data.anomalies_detectees} anomalie(s) — seuil : ${data.seuil}`;
 
+    // --- Cas : aucune anomalie ---
     if (data.resultats.length === 0) {
       container.innerHTML = `
         <div style="text-align:center;padding:40px 20px;color:var(--muted)">
@@ -263,6 +304,8 @@ async function loadAnomalies() {
       return;
     }
 
+    // --- Cas : anomalies detectees ---
+    // Grille responsive : auto-fill = autant de colonnes que possible (min 280px)
     container.innerHTML = `
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px">
         ${data.resultats.map(r => `

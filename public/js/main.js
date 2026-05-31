@@ -1,13 +1,36 @@
-const API = 'http://localhost:3000/api';
+// =============================================================================
+// public/js/main.js — Coeur du frontend LogWatch
+// -----------------------------------------------------------------------------
+// Ce fichier gere :
+//   - L'URL de base de l'API
+//   - La sidebar (ouvrir/fermer + memoire localStorage)
+//   - Le theme clair/sombre (avec persistance)
+//   - La navigation entre les 5 pages
+//   - Les notifications (toast en haut a droite)
+//   - Le modal de detail d'un log
+//   - Le formulaire d'insertion temps reel (avec champs DYNAMIQUES selon le type)
+// =============================================================================
 
-// ── Sidebar Toggle ──
+// URL de base de l'API. "/api" car le frontend est servi sur le meme serveur.
+const API = '/api';
+
+// =============================================================================
+// SECTION 1 — Sidebar (barre laterale gauche)
+// =============================================================================
 function toggleSidebar() {
   const sidebar = document.getElementById('sidebar');
+  // toggle = ajoute la classe si elle n'est pas la, l'enleve sinon
   sidebar.classList.toggle('collapsed');
+  // localStorage = stockage navigateur persistant (survit aux rechargements)
   localStorage.setItem('sidebar-collapsed', sidebar.classList.contains('collapsed'));
 }
 
-// ── Bascule thème clair / sombre ──
+// =============================================================================
+// SECTION 2 — Theme clair / sombre
+// =============================================================================
+
+// Applique un theme en modifiant l'attribut data-theme sur <html>
+// Le CSS utilise cet attribut pour basculer entre les deux palettes.
 function applyTheme(theme) {
   const icon = document.getElementById('themeIcon');
   const label = document.getElementById('themeLabel');
@@ -22,6 +45,7 @@ function applyTheme(theme) {
   }
 }
 
+// Bascule entre clair et sombre, et sauvegarde le choix
 function toggleTheme() {
   const current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
   const next = current === 'light' ? 'dark' : 'light';
@@ -29,28 +53,43 @@ function toggleTheme() {
   localStorage.setItem('theme', next);
 }
 
-// Restaurer l'état de la sidebar et du thème
+// =============================================================================
+// SECTION 3 — Initialisation au chargement de la page
+// =============================================================================
+// DOMContentLoaded = evenement declenche quand le HTML est entierement charge
 document.addEventListener('DOMContentLoaded', () => {
   const sidebar = document.getElementById('sidebar');
+
+  // Restaurer l'etat de la sidebar (ouverte / fermee)
   if (localStorage.getItem('sidebar-collapsed') === 'true') {
     sidebar.classList.add('collapsed');
   }
+
+  // Restaurer le theme sauvegarde, sinon mode sombre par defaut
   applyTheme(localStorage.getItem('theme') || 'dark');
-  updateDate();
-  updateInsertForm();
-  loadDashboard();
+
+  updateDate();          // affiche la date du jour dans le header
+  updateInsertForm();    // prepare les champs dynamiques du formulaire d'insertion
+  loadDashboard();       // charge la page dashboard (KPIs, graphiques, derniers logs)
 });
 
-// ── Date temps réel ──
+// =============================================================================
+// SECTION 4 — Affichage de la date du jour (formate en francais)
+// =============================================================================
 function updateDate() {
   const el = document.getElementById('current-date');
   const now = new Date();
+  // toLocaleDateString avec options -> "ven. 31 mai 2026"
   el.textContent = now.toLocaleDateString('fr-FR', {
     weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'
   });
 }
 
-// ── Navigation ──
+// =============================================================================
+// SECTION 5 — Navigation entre les 5 pages
+// =============================================================================
+
+// Configuration des titres et sous-titres pour chaque page
 const pageConfig = {
   dashboard:    { title: 'Dashboard',       sub: 'Vue temps réel de l\'infrastructure UGANC' },
   logs:         { title: 'Logs',            sub: 'Recherche et consultation des logs' },
@@ -59,18 +98,25 @@ const pageConfig = {
   applications: { title: 'Applications',    sub: 'Gestion des sources de logs surveillées' },
 };
 
+// Affiche la page demandee (cachee les autres) + met a jour le titre
 function showPage(page, el) {
+  // 1. Cacher toutes les pages
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  // 2. Desactiver tous les liens de menu
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  // 3. Afficher la page choisie
   document.getElementById(`page-${page}`).classList.add('active');
+  // 4. Marquer le lien de menu courant comme actif
   if (el) el.classList.add('active');
 
+  // 5. Mettre a jour le titre du topbar
   const config = pageConfig[page];
   if (config) {
     document.getElementById('topbar-title').textContent = config.title;
     document.getElementById('topbar-sub').textContent = config.sub;
   }
 
+  // 6. Charger les donnees specifiques a chaque page
   if (page === 'dashboard')    loadDashboard();
   if (page === 'logs')         loadLogs();
   if (page === 'analytique')   loadAnalytique();
@@ -78,25 +124,35 @@ function showPage(page, el) {
   if (page === 'applications') loadApplications();
 }
 
-// ── Notification ──
+// =============================================================================
+// SECTION 6 — Notifications (toast en haut a droite)
+// =============================================================================
 function notify(message, type = 'success') {
   const n = document.getElementById('notification');
   const icon = type === 'success' ? '✓' : '✕';
   n.innerHTML = `<span>${icon}</span> ${message}`;
   n.className = `notification ${type} show`;
+  // Disparait apres 3.5 secondes
   setTimeout(() => n.classList.remove('show'), 3500);
 }
 
-// ── Modal ──
+// =============================================================================
+// SECTION 7 — Modal de detail d'un log
+// =============================================================================
 function closeModal() {
   document.getElementById('modal-log').classList.remove('open');
 }
 
+// Ferme le modal si on clique HORS de son contenu (sur le fond noir)
 function closeModalOutside(e) {
   if (e.target === document.getElementById('modal-log')) closeModal();
 }
 
-// ── Formatters ──
+// =============================================================================
+// SECTION 8 — Helpers de formatage (utilises par toutes les pages)
+// =============================================================================
+
+// Formate une date ISO en "31/05/2026 14:32"
 function formatDate(ts) {
   return new Date(ts).toLocaleString('fr-FR', {
     day: '2-digit', month: '2-digit', year: 'numeric',
@@ -104,17 +160,27 @@ function formatDate(ts) {
   });
 }
 
+// Genere un badge colore pour le niveau (DEBUG, INFO, WARN, ERROR, CRITICAL)
+// Les couleurs sont definies en CSS via les classes badge-DEBUG, badge-INFO...
 function badgeLevel(level) {
   return `<span class="badge badge-${level}">${level}</span>`;
 }
 
-// ── Champs dynamiques insertion ──
+// =============================================================================
+// SECTION 9 — Formulaire d'insertion : CHAMPS DYNAMIQUES
+// -----------------------------------------------------------------------------
+// L'utilisateur choisit un TYPE (Erreur / Web / Securite / DB) dans un select.
+// Selon le choix, on injecte des champs HTML DIFFERENTS dans le formulaire.
+// C'est la demonstration cote frontend du schema flexible NoSQL.
+// =============================================================================
 function updateInsertForm() {
   const type = document.getElementById('insert-type')?.value;
   const container = document.getElementById('insert-dynamic-fields');
   if (!container) return;
 
+  // Dictionnaire : a chaque type, on associe le HTML des champs specifiques
   const fields = {
+    // --- Type "erreur" (Java) ---
     erreur: `
       <div class="form-group">
         <label>Type d'exception</label>
@@ -130,6 +196,7 @@ function updateInsertForm() {
         <input type="number" id="f-nb_occurrences" value="1" min="1">
       </div>`,
 
+    // --- Type "web" ---
     web: `
       <div class="form-group">
         <label>Méthode HTTP</label>
@@ -151,6 +218,7 @@ function updateInsertForm() {
         <input type="number" id="f-duree_ms" value="120">
       </div>`,
 
+    // --- Type "securite" ---
     securite: `
       <div class="form-group">
         <label>Utilisateur</label>
@@ -179,6 +247,7 @@ function updateInsertForm() {
         <input type="number" id="f-tentatives" value="1" min="1">
       </div>`,
 
+    // --- Type "base_de_donnees" ---
     base_de_donnees: `
       <div class="form-group">
         <label>Requête SQL</label>
@@ -195,11 +264,19 @@ function updateInsertForm() {
       </div>`
   };
 
+  // Injection du HTML correspondant au type choisi
   container.innerHTML = fields[type] || '';
 }
 
-// ── Insertion log ──
+// =============================================================================
+// SECTION 10 — Insertion temps reel d'un log
+// -----------------------------------------------------------------------------
+// Recupere les valeurs du formulaire, construit un objet Log avec les bons
+// champs selon le type, et l'envoie via POST /api/logs.
+// =============================================================================
 async function insertLog() {
+
+  // --- Recuperation des champs COMMUNS ---
   const type    = document.getElementById('insert-type').value;
   const app_id  = document.getElementById('insert-app').value;
   const level   = document.getElementById('insert-level').value;
@@ -207,10 +284,12 @@ async function insertLog() {
 
   if (!message) return notify('Le message est obligatoire', 'error');
 
+  // Helper local : recupere la valeur d'un input par son id (ou undefined)
   const get = id => document.getElementById(id)?.value;
 
+  // --- Construction de l'objet log avec champs de base ---
   const log = {
-    log_id: `LOG-RT-${Date.now()}`,
+    log_id: `LOG-RT-${Date.now()}`,                            // identifiant unique avec timestamp
     app_id, level, message,
     type_log: type,
     source_fichier: type === 'erreur' ? 'ManualInsert.java' : `${type}.log`,
@@ -218,6 +297,8 @@ async function insertLog() {
     timestamp: new Date()
   };
 
+  // --- Ajout des champs SPECIFIQUES selon le type ---
+  // Demonstration du schema flexible cote client.
   if (type === 'erreur') {
     log.exception_type  = get('f-exception_type');
     log.stack_trace     = get('f-stack_trace');
@@ -241,6 +322,7 @@ async function insertLog() {
     log.nb_lignes_affectees  = parseInt(get('f-nb_lignes_affectees')) || 0;
   }
 
+  // --- Envoi au backend via POST /api/logs ---
   try {
     const res = await fetch(`${API}/logs`, {
       method: 'POST',
@@ -251,7 +333,7 @@ async function insertLog() {
     if (res.ok) {
       notify('✓ Log inséré avec succès !');
       document.getElementById('insert-message').value = '';
-      loadDashboard();
+      loadDashboard();   // rafraichir le dashboard pour voir le nouveau log
     } else {
       notify('Erreur lors de l\'insertion', 'error');
     }
